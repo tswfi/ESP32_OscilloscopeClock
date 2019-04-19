@@ -90,35 +90,10 @@ int           Timeout        = 20*1000;
 const    long interval       = 10*60*1000; //milliseconds, you should twick this
                                           //to get a better accuracy
 
-char *ssid      = "SSID";        // Set you WiFi SSID
-char *password  = "PASSWORD";        // Set you WiFi password
+char *ssid      = 'SSID';        // Set you WiFi SSID
+char *password  = 'PASSWORD';        // Set you WiFi password
 
 const int TRIGGER = 15;
-
-//*****************************************************************************
-// PlotTable
-//*****************************************************************************
-
-void PlotTable(byte *SubTable, int SubTableSize, int skip, int opt, int offset)
-{
-  int i=offset;
-  while (i<SubTableSize){
-    if (SubTable[i+2]==skip){
-      i=i+3;
-      if (opt==1) if (SubTable[i]==skip) i++;
-    }
-    Line(SubTable[i],SubTable[i+1],SubTable[i+2],SubTable[i+3]);
-    if (opt==2){
-      Line(SubTable[i+2],SubTable[i+3],SubTable[i],SubTable[i+1]);
-    }
-    i=i+2;
-    if (SubTable[i+2]==0xFF) break;
-  }
-}
-
-// End PlotTable
-//*****************************************************************************
-
 
 
 //*****************************************************************************
@@ -343,6 +318,31 @@ void Line(byte x1, byte y1, byte x2, byte y2)
 
 // End Line
 //*****************************************************************************
+
+//*****************************************************************************
+// PlotTable
+//*****************************************************************************
+
+void PlotTable(byte *SubTable, int SubTableSize, int skip, int opt, int offset)
+{
+  int i=offset;
+  while (i<SubTableSize){
+    if (SubTable[i+2]==skip){
+      i=i+3;
+      if (opt==1) if (SubTable[i]==skip) i++;
+    }
+    Line(SubTable[i],SubTable[i+1],SubTable[i+2],SubTable[i+3]);
+    if (opt==2){
+      Line(SubTable[i+2],SubTable[i+3],SubTable[i],SubTable[i+1]);
+    }
+    i=i+2;
+    if (SubTable[i+2]==0xFF) break;
+  }
+}
+
+// End PlotTable
+//*****************************************************************************
+
 
 // time_t getNtpTime()
 void getNtpTime() {
