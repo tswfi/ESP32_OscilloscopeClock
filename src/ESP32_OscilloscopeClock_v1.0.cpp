@@ -90,8 +90,8 @@ int           Timeout        = 20*1000;
 const    long interval       = 10*60*1000; //milliseconds, you should twick this
                                           //to get a better accuracy
 
-char *ssid      = 'SSID';        // Set you WiFi SSID
-char *password  = 'PASSWORD';        // Set you WiFi password
+char *ssid      = "SSID";        // Set you WiFi SSID
+char *password  = "PASSWORD";        // Set you WiFi password
 
 const int TRIGGER = 15;
 
@@ -368,8 +368,8 @@ void setup()
   Serial.println("\nESP32 Oscilloscope Clock v1.0");
   Serial.println("Mauro Pintus 2018\nwww.mauroh.com");
   //rtc_clk_cpu_freq_set(RTC_CPU_FREQ_240M);
-  Serial.println("CPU Clockspeed: ");
-  Serial.println(rtc_clk_cpu_freq_value(rtc_clk_cpu_freq_get()));
+  //Serial.println("CPU Clockspeed: ");
+  //Serial.println(rtc_clk_cpu_freq_value(rtc_clk_cpu_freq_get()));
 
   Serial.println("Connecting to Wi-Fi");
 
@@ -437,7 +437,7 @@ void loop() {
   //PlotTable(TestData,sizeof(TestData),0x00,0,00); //Full
   //PlotTable(TestData,sizeof(TestData),0x00,0,11); //Without square
 
-  int i;
+  //int i;
   //Serial.println("Out Ring");                         //2 to back trace
   //for (i=0; i < 1000; i++) PlotTable(DialData,sizeof(DialData),0x00,2,0);
 
