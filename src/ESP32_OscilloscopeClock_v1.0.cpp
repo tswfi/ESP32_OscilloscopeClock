@@ -1,8 +1,8 @@
 /******************************************************************************
-  
-  ESP32 Oscilloscope Clock 
+
+  ESP32 Oscilloscope Clock
   using internal DACs, with WiFi and ntp sync.
-  
+
   Mauro Pintus , Milano 2018/05/25
 
   How to use it:
@@ -16,21 +16,21 @@
   Enjoy Your new Oscilloscope Clock!!! :)
 
   Additional notes:
-  By default this sketch will start from a fix time 10:08:37 everityme 
+  By default this sketch will start from a fix time 10:08:37 everityme
   you reset the board.
   To change it, modify the variables h,m,s below.
 
-  To synchronize the clock with an NTP server, you have to install 
+  To synchronize the clock with an NTP server, you have to install
   the library NTPtimeESP from Andreas Spiess.
   Then ncomment the line //#define NTP, removing the //.
   Edit the WiFi credential in place of Your SSID and Your PASS.
   Check in the serial monitor if it can reach the NTP server.
   You mignt need to chouse a different pool server for your country.
 
-  If you want there is also a special mode that can be enabled uncommenting 
+  If you want there is also a special mode that can be enabled uncommenting
   the line //#define EXCEL, removing the //. In this mode, the sketch
   will run once and will output on the serial monitor all the coordinates
-  it has generated. You can use this coordinates to draw the clock 
+  it has generated. You can use this coordinates to draw the clock
   using the graph function in Excel or LibreOffice
   This is useful to test anything you want to display on the oscilloscope
   to verify the actual points that will be generated.
@@ -53,14 +53,14 @@
 
   Andreas Spiess NTP Library
   https://github.com/SensorsIot/NTPtimeESP
-  
+
   My project is based on this one:
   http://www.dutchtronix.com/ScopeClock.htm
-  
+
   Thank you!!
 
 ******************************************************************************/
-
+#include "Arduino.h"
 #include <driver/dac.h>
 #include <soc/rtc.h>
 #include <soc/sens_reg.h>
@@ -85,7 +85,7 @@ simpleDSTadjust dstAdjusted(StartRule, EndRule);
 //Variables
 int           lastx,lasty;
 unsigned long currentMillis  = 0;
-unsigned long previousMillis = 0;    
+unsigned long previousMillis = 0;
 int           Timeout        = 20*1000;
 const    long interval       = 10*60*1000; //milliseconds, you should twick this
                                           //to get a better accuracy
@@ -96,7 +96,7 @@ char *password  = "PASSWORD";        // Set you WiFi password
 const int TRIGGER = 15;
 
 //*****************************************************************************
-// PlotTable 
+// PlotTable
 //*****************************************************************************
 
 void PlotTable(byte *SubTable, int SubTableSize, int skip, int opt, int offset)
@@ -107,22 +107,22 @@ void PlotTable(byte *SubTable, int SubTableSize, int skip, int opt, int offset)
       i=i+3;
       if (opt==1) if (SubTable[i]==skip) i++;
     }
-    Line(SubTable[i],SubTable[i+1],SubTable[i+2],SubTable[i+3]);  
+    Line(SubTable[i],SubTable[i+1],SubTable[i+2],SubTable[i+3]);
     if (opt==2){
-      Line(SubTable[i+2],SubTable[i+3],SubTable[i],SubTable[i+1]); 
+      Line(SubTable[i+2],SubTable[i+3],SubTable[i],SubTable[i+1]);
     }
     i=i+2;
     if (SubTable[i+2]==0xFF) break;
   }
 }
 
-// End PlotTable 
+// End PlotTable
 //*****************************************************************************
 
 
 
 //*****************************************************************************
-// Dot 
+// Dot
 //*****************************************************************************
 
 inline void Dot(int x, int y)
@@ -161,13 +161,13 @@ inline void Dot(int x, int y)
     #endif
 }
 
-// End Dot 
+// End Dot
 //*****************************************************************************
 
 
 
 //*****************************************************************************
-// Line 
+// Line
 //*****************************************************************************
 // Bresenham's Algorithm implementation optimized
 // also known as a DDA - digital differential analyzer
@@ -252,7 +252,7 @@ void Line(byte x1, byte y1, byte x2, byte y2)
                         acc += dy;
                     }
                 }
-            }        
+            }
         }
     }
     else { // quadrant 3 or 4
@@ -275,11 +275,11 @@ void Line(byte x1, byte y1, byte x2, byte y2)
                         acc += dx;
                     }
                 }
-            
+
             }
             else {  // > 45
                 acc = dy >> 1;
-                for (; y1 >= y2; y1--) { 
+                for (; y1 >= y2; y1--) {
                     Dot(x1, y1);
                     if (first_point)
                     {
@@ -334,20 +334,20 @@ void Line(byte x1, byte y1, byte x2, byte y2)
                 }
             }
         }
-    
+
     }
 
-    
+
     digitalWrite(TRIGGER, HIGH);
 }
 
-// End Line 
+// End Line
 //*****************************************************************************
 
 // time_t getNtpTime()
 void getNtpTime() {
   time_t now;
-  
+
   int i = 0;
   configTime(UTC_OFFSET * 3600, 0, NTP_SERVERS);
   while((now = time(nullptr)) < NTP_MIN_VALID_EPOCH) {
@@ -359,10 +359,10 @@ void getNtpTime() {
 }
 
 //*****************************************************************************
-// setup 
+// setup
 //*****************************************************************************
 
-void setup() 
+void setup()
 {
   Serial.begin(115200);
   Serial.println("\nESP32 Oscilloscope Clock v1.0");
@@ -375,7 +375,7 @@ void setup()
 
   pinMode(TRIGGER, OUTPUT);
   digitalWrite(TRIGGER, HIGH);
-    
+
   WiFi.begin (ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
@@ -386,7 +386,7 @@ void setup()
       break;
     }
   }
-  
+
   dac_output_enable(DAC_CHANNEL_1);
   dac_output_enable(DAC_CHANNEL_2);
 
@@ -395,10 +395,10 @@ void setup()
   char *dstAbbrev;
   time_t now = dstAdjusted.time(&dstAbbrev);
   struct tm * timeinfo = localtime (&now);
-  
+
   Serial.println();
   Serial.printf("Current time: %d:%d:%d\n", timeinfo->tm_hour%12, timeinfo->tm_min,timeinfo->tm_sec);
-  
+
 //  // calculate for time calculation how much the dst class adds.
 //  time_t dstOffset = UTC_OFFSET * 3600 + dstAdjusted.time(nullptr) - now;
 //  Serial.printf("Time difference for DST: %d\n", dstOffset);
@@ -406,17 +406,17 @@ void setup()
   previousMillis = currentMillis;
 }
 
-// End setup 
+// End setup
 //*****************************************************************************
 
 
 
 //*****************************************************************************
-// loop 
+// loop
 //*****************************************************************************
 
 void loop() {
-  
+
   currentMillis = millis();
 
   if (currentMillis - previousMillis >= interval) {
@@ -431,7 +431,7 @@ void loop() {
   int h = timeinfo->tm_hour%12;
   int m = timeinfo->tm_min;
   int s = timeinfo->tm_sec;
-  
+
   //Optionals
   //PlotTable(DialDots,sizeof(DialDots),0x00,1,0);
   //PlotTable(TestData,sizeof(TestData),0x00,0,00); //Full
@@ -440,21 +440,21 @@ void loop() {
   int i;
   //Serial.println("Out Ring");                         //2 to back trace
   //for (i=0; i < 1000; i++) PlotTable(DialData,sizeof(DialData),0x00,2,0);
- 
+
   //Serial.println("Diagonals");                        //2 to back trace
   //for (i=0; i < 2000; i++) PlotTable(DialData,sizeof(DialData),0x00,0,0);
 
   PlotTable(DialData,sizeof(DialData),0x00,1,0);      //2 to back trace
-  PlotTable(DialDigits12,sizeof(DialDigits12),0x00,1,0);//2 to back trace 
+  PlotTable(DialDigits12,sizeof(DialDigits12),0x00,1,0);//2 to back trace
   PlotTable(HrPtrData, sizeof(HrPtrData), 0xFF,0,(9*(5*h+m/12)));  // 9*h
   PlotTable(MinPtrData,sizeof(MinPtrData),0xFF,0,9*m);  // 9*m
   PlotTable(SecPtrData,sizeof(SecPtrData),0xFF,0,5*s);  // 5*s
 
   #if defined EXCEL
     while(1);
-  #endif 
+  #endif
 
 }
 
-// End loop 
+// End loop
 //*****************************************************************************
