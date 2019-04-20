@@ -3,86 +3,50 @@
   ESP32 Oscilloscope Clock
   using internal DACs, with WiFi and ntp sync.
 
-  Mauro Pintus , Milano 2018/05/25
-
-  How to use it:
-  Load this sketch on a ESP32 board using the Arduino IDE 1.8.7
-  See Andreas Spiess video linked below if you dont know how to...
-  Connect your oscilloscope channels to GPIO25 and GPIO26 of the ESP32
-  Connect the ground of the oscilloscope to the GND of the ESP32 board
-  Put your Oscilloscope in XY mode
-  Adjust the vertical scale of the used channels to fit the clock
-
-  Enjoy Your new Oscilloscope Clock!!! :)
-
-  Additional notes:
-  By default this sketch will start from a fix time 10:08:37 everityme
-  you reset the board.
-  To change it, modify the variables h,m,s below.
-
-  To synchronize the clock with an NTP server, you have to install
-  the library NTPtimeESP from Andreas Spiess.
-  Then ncomment the line //#define NTP, removing the //.
-  Edit the WiFi credential in place of Your SSID and Your PASS.
-  Check in the serial monitor if it can reach the NTP server.
-  You mignt need to chouse a different pool server for your country.
-
-  If you want there is also a special mode that can be enabled uncommenting
-  the line //#define EXCEL, removing the //. In this mode, the sketch
-  will run once and will output on the serial monitor all the coordinates
-  it has generated. You can use this coordinates to draw the clock
-  using the graph function in Excel or LibreOffice
-  This is useful to test anything you want to display on the oscilloscope
-  to verify the actual points that will be generated.
-
+  Based on great work by: Mauro Pintus , Milano 2018/05/25
   GitHub Repository
   https://github.com/maurohh/ESP32_OscilloscopeClock
 
-  Twitter Page
-  https://twitter.com/PintusMauro
+  This modified version by: Tatu Wikman
+  https://github.com/tswfi/ESP32_OscilloscopeClock
 
-  Youtube Channel
-  www.youtube.com/channel/UCZ93JYpVb9rEbg5cbcVG_WA/
-
-  Old Web Site
-  www.mauroh.com
-
-  Credits:
-  Andreas Spiess
-  https://www.youtube.com/watch?v=DgaKlh081tU
-
-  Andreas Spiess NTP Library
-  https://github.com/SensorsIot/NTPtimeESP
-
-  My project is based on this one:
-  http://www.dutchtronix.com/ScopeClock.htm
-
-  Thank you!!
-
+  How to use it:
+  Build and upload to esp32, connect dac pins to oscilloscope on xy mode and
+  follow the instructions to get wifi and timezone adjusted
 ******************************************************************************/
 #include "Arduino.h"
-#include <driver/dac.h>
-#include <soc/rtc.h>
-#include <soc/sens_reg.h>
+
+// for saving settings in spiffs
+#include "FS.h"
+#include "SPIFFS.h"
+#include "ArduinoJson.h"
+
+//
+#include "driver/dac.h"
+#include "soc/rtc.h"
+#include "soc/sens_reg.h"
+#include "simpleDSTadjust.h"
+#include "WiFi.h"
+
+// data to show
 #include "DataTable.h"
-#include <simpleDSTadjust.h>
-#include <WiFi.h>
 
-#include <DNSServer.h>
-#include <WebServer.h>
-#include <WiFiManager.h>
+// for wifi manager
+#include "DNSServer.h"
+#include "WebServer.h"
+#include "WiFiManager.h"
 
-//#define EXCEL
-//#define NTP
-#define UTC_OFFSET 0
+// timezone and dst rules
+int utc_offset = 0;
 struct dstRule StartRule = {"PDT", Second, Sun, Mar, 2, 3600}; // Pacific Daylight time = UTC/GMT -7 hours
 struct dstRule EndRule = {"PST", First, Sun, Nov, 1, 0};       // Pacific Standard time = UTC/GMT -8 hour
 simpleDSTadjust dstAdjusted(StartRule, EndRule);
 
 WiFiManager wifiManager;
+bool shouldSaveConfig = false;
 
 // change for different NTP (time servers)
-#define NTP_SERVERS "us.pool.ntp.org", "time.nist.gov", "pool.ntp.org"
+#define NTP_SERVERS "pool.ntp.org"
 
 // August 1st, 2018
 #define NTP_MIN_VALID_EPOCH 1533081600
@@ -91,15 +55,9 @@ WiFiManager wifiManager;
 int lastx, lasty;
 unsigned long currentMillis = 0;
 unsigned long previousMillis = 0;
-int Timeout = 20 * 1000;
-const long interval = 10 * 60 * 1000; //milliseconds, you should twick this
-                                      //to get a better accuracy
-const int TRIGGER = 15;
+const long ntp_refresh_interval = 10 * 60 * 1000; // in milliseconds
 
-//*****************************************************************************
-// Dot
-//*****************************************************************************
-
+// Draw a dot in X Y
 inline void Dot(int x, int y)
 {
   if (lastx != x)
@@ -107,50 +65,15 @@ inline void Dot(int x, int y)
     lastx = x;
     dac_output_voltage(DAC_CHANNEL_1, x);
   }
-#if defined EXCEL
-  Serial.print("0x");
-  if (x <= 0xF)
-    Serial.print("0");
-  Serial.print(x, HEX);
-  Serial.print(",");
-#endif
-#if defined EXCEL
-  Serial.print("0x");
-  if (lasty <= 0xF)
-    Serial.print("0");
-  Serial.print(lasty, HEX);
-  Serial.println(",");
-#endif
   if (lasty != y)
   {
     lasty = y;
     dac_output_voltage(DAC_CHANNEL_2, y);
   }
-#if defined EXCEL
-  Serial.print("0x");
-  if (x <= 0xF)
-    Serial.print("0");
-  Serial.print(x, HEX);
-  Serial.print(",");
-#endif
-#if defined EXCEL
-  Serial.print("0x");
-  if (y <= 0xF)
-    Serial.print("0");
-  Serial.print(y, HEX);
-  Serial.println(",");
-#endif
 }
 
-// End Dot
-//*****************************************************************************
-
-//*****************************************************************************
-// Line
-//*****************************************************************************
 // Bresenham's Algorithm implementation optimized
 // also known as a DDA - digital differential analyzer
-
 void Line(byte x1, byte y1, byte x2, byte y2)
 {
   int n = 2;
@@ -173,7 +96,6 @@ void Line(byte x1, byte y1, byte x2, byte y2)
           {
             delayMicroseconds(n);
             first_point = false;
-            digitalWrite(TRIGGER, LOW);
           }
           acc -= dy;
           if (acc < 0)
@@ -193,7 +115,6 @@ void Line(byte x1, byte y1, byte x2, byte y2)
           {
             delayMicroseconds(n);
             first_point = false;
-            digitalWrite(TRIGGER, LOW);
           }
           acc -= dx;
           if (acc < 0)
@@ -217,7 +138,6 @@ void Line(byte x1, byte y1, byte x2, byte y2)
           {
             delayMicroseconds(n);
             first_point = false;
-            digitalWrite(TRIGGER, LOW);
           }
           acc -= dy;
           if (acc < 0)
@@ -237,7 +157,6 @@ void Line(byte x1, byte y1, byte x2, byte y2)
           {
             delayMicroseconds(n);
             first_point = false;
-            digitalWrite(TRIGGER, LOW);
           }
           acc -= dx;
           if (acc < 0)
@@ -265,7 +184,6 @@ void Line(byte x1, byte y1, byte x2, byte y2)
           {
             delayMicroseconds(n);
             first_point = false;
-            digitalWrite(TRIGGER, LOW);
           }
           acc -= dy;
           if (acc < 0)
@@ -285,7 +203,6 @@ void Line(byte x1, byte y1, byte x2, byte y2)
           {
             delayMicroseconds(n);
             first_point = false;
-            digitalWrite(TRIGGER, LOW);
           }
           acc -= dx;
           if (acc < 0)
@@ -309,7 +226,6 @@ void Line(byte x1, byte y1, byte x2, byte y2)
           {
             delayMicroseconds(n);
             first_point = false;
-            digitalWrite(TRIGGER, LOW);
           }
           acc -= dy;
           if (acc < 0)
@@ -329,7 +245,6 @@ void Line(byte x1, byte y1, byte x2, byte y2)
           {
             delayMicroseconds(n);
             first_point = false;
-            digitalWrite(TRIGGER, LOW);
           }
           acc -= dx;
           if (acc < 0)
@@ -341,16 +256,7 @@ void Line(byte x1, byte y1, byte x2, byte y2)
       }
     }
   }
-
-  digitalWrite(TRIGGER, HIGH);
 }
-
-// End Line
-//*****************************************************************************
-
-//*****************************************************************************
-// PlotTable
-//*****************************************************************************
 
 void PlotTable(byte *SubTable, int SubTableSize, int skip, int opt, int offset)
 {
@@ -375,16 +281,13 @@ void PlotTable(byte *SubTable, int SubTableSize, int skip, int opt, int offset)
   }
 }
 
-// End PlotTable
-//*****************************************************************************
-
 // time_t getNtpTime()
 void getNtpTime()
 {
   time_t now;
 
   int i = 0;
-  configTime(UTC_OFFSET * 3600, 0, NTP_SERVERS);
+  configTime(utc_offset * 3600, 0, NTP_SERVERS);
   while ((now = time(nullptr)) < NTP_MIN_VALID_EPOCH)
   {
     delay(500);
@@ -394,44 +297,93 @@ void getNtpTime()
   }
 }
 
-
-void configModeCallback (WiFiManager *myWiFiManager) {
-  Serial.println("Entered config mode");
-  Serial.println(WiFi.softAPIP());
-  // TODO:
-  Serial.println(myWiFiManager->getConfigPortalSSID());
+// callback coming back from config mode
+void configModeCallback(WiFiManager *myWiFiManager)
+{
+  shouldSaveConfig = true;
 }
 
+void writeDefaultConfig(String json)
+{
+  File configFile = SPIFFS.open("/config.json", "w");
+  if (!configFile)
+  {
+    Serial.println("could not write the default config file, freezing");
+    while (1)
+      ;
+  }
+  configFile.println(json);
+  Serial.println("Wrote default config");
+  configFile.close();
+}
 
-//*****************************************************************************
-// setup
-//*****************************************************************************
+void readConfig()
+{
+  File configFile = SPIFFS.open("/config.json", "r");
+  if (!configFile)
+  {
+    Serial.println("could not read the config file, freezing");
+    while (1)
+      ;
+  }
+  size_t size = configFile.size();
+  std::unique_ptr<char[]> buf(new char[size]);
+
+  DynamicJsonDocument doc(1024);
+  DeserializationError error = deserializeJson(doc, configFile.readString());
+  if (error)
+  {
+    Serial.println("Failed to deserialize config file, freezing");
+    while (1)
+      ;
+  }
+  // read our utc offset from the doc
+  utc_offset = doc["utc_offset"];
+  Serial.print("Read utc_offset from config: ");
+  Serial.println(utc_offset);
+  configFile.close();
+}
 
 void setup()
 {
   Serial.begin(115200);
   Serial.println("\nESP32 Oscilloscope Clock v1.0");
   Serial.println("Mauro Pintus 2018\nwww.mauroh.com");
-  //rtc_clk_cpu_freq_set(RTC_CPU_FREQ_240M);
-  //Serial.println("CPU Clockspeed: ");
-  //Serial.println(rtc_clk_cpu_freq_value(rtc_clk_cpu_freq_get()));
+  Serial.println("Extended by Tatu Wikman");
 
-  Serial.println("Connecting to Wi-Fi");
+  if (!SPIFFS.begin(true))
+  {
+    Serial.println("Failed to start or format SPIFFS, freezing");
+    while (1)
+      ;
+  }
 
-  // for showing text "please connect to access point XXX to configure"
+  Serial.println("mounted SPIFFS");
+  if (!SPIFFS.exists("/config.json"))
+  {
+    writeDefaultConfig("{\"utcOffset\": 0}");
+  }
+  // read the config from SPIFFS
+  readConfig();
+
+  Serial.println("Starting WifiManager");
+
+  // register our callback
   wifiManager.setAPCallback(configModeCallback);
-  // timezone
-  WiFiManagerParameter timezoneparameter("timezone", "+2, -8, 0", UTC_OFFSET, 40);
+
+  // timezone paramater for wifimanager
+  char buf[8];
+  itoa(utc_offset, buf, 10);
+  WiFiManagerParameter timezoneparameter("timezone", "Timezone: +2, -8, 0", buf, 3);
   wifiManager.addParameter(&timezoneparameter);
 
   wifiManager.autoConnect();
 
-  pinMode(TRIGGER, OUTPUT);
-  digitalWrite(TRIGGER, HIGH);
-
+  // start dac
   dac_output_enable(DAC_CHANNEL_1);
   dac_output_enable(DAC_CHANNEL_2);
 
+  // fetch time on startup
   getNtpTime();
 
   char *dstAbbrev;
@@ -441,26 +393,14 @@ void setup()
   Serial.println();
   Serial.printf("Current time: %d:%d:%d\n", timeinfo->tm_hour % 12, timeinfo->tm_min, timeinfo->tm_sec);
 
-  //  // calculate for time calculation how much the dst class adds.
-  //  time_t dstOffset = UTC_OFFSET * 3600 + dstAdjusted.time(nullptr) - now;
-  //  Serial.printf("Time difference for DST: %d\n", dstOffset);
-
   previousMillis = currentMillis;
 }
 
-// End setup
-//*****************************************************************************
-
-//*****************************************************************************
-// loop
-//*****************************************************************************
-
 void loop()
 {
-
   currentMillis = millis();
 
-  if (currentMillis - previousMillis >= interval)
+  if (currentMillis - previousMillis >= ntp_refresh_interval)
   {
     previousMillis = currentMillis;
     getNtpTime();
@@ -474,29 +414,9 @@ void loop()
   int m = timeinfo->tm_min;
   int s = timeinfo->tm_sec;
 
-  //Optionals
-  //PlotTable(DialDots,sizeof(DialDots),0x00,1,0);
-  //PlotTable(TestData,sizeof(TestData),0x00,0,00); //Full
-  //PlotTable(TestData,sizeof(TestData),0x00,0,11); //Without square
-
-  //int i;
-  //Serial.println("Out Ring");                         //2 to back trace
-  //for (i=0; i < 1000; i++) PlotTable(DialData,sizeof(DialData),0x00,2,0);
-
-  //Serial.println("Diagonals");                        //2 to back trace
-  //for (i=0; i < 2000; i++) PlotTable(DialData,sizeof(DialData),0x00,0,0);
-
   PlotTable(DialData, sizeof(DialData), 0x00, 1, 0);                        //2 to back trace
   PlotTable(DialDigits12, sizeof(DialDigits12), 0x00, 1, 0);                //2 to back trace
   PlotTable(HrPtrData, sizeof(HrPtrData), 0xFF, 0, (9 * (5 * h + m / 12))); // 9*h
   PlotTable(MinPtrData, sizeof(MinPtrData), 0xFF, 0, 9 * m);                // 9*m
   PlotTable(SecPtrData, sizeof(SecPtrData), 0xFF, 0, 5 * s);                // 5*s
-
-#if defined EXCEL
-  while (1)
-    ;
-#endif
 }
-
-// End loop
-//*****************************************************************************
