@@ -55,7 +55,8 @@ bool shouldSaveConfig = false;
 int lastx, lasty;
 unsigned long currentMillis = 0;
 unsigned long previousMillis = 0;
-const long ntp_refresh_interval = 10 * 60 * 1000; // in milliseconds
+const long ntp_refresh_interval = 10 * 60 * 1000; // in milliseconds, 10 minutes
+bool ntpsynchappened = false;
 
 // Draw a dot in X Y
 inline void Dot(int x, int y)
@@ -295,6 +296,8 @@ void getNtpTime()
     if (i > 60)
       break;
   }
+
+  ntpsynchappened = true;
 }
 
 // callback coming back from config mode
@@ -385,13 +388,14 @@ void setup()
 
   // fetch time on startup
   getNtpTime();
-
+/*
   char *dstAbbrev;
   time_t now = dstAdjusted.time(&dstAbbrev);
   struct tm *timeinfo = localtime(&now);
 
   Serial.println();
   Serial.printf("Current time: %d:%d:%d\n", timeinfo->tm_hour % 12, timeinfo->tm_min, timeinfo->tm_sec);
+*/
 
   previousMillis = currentMillis;
 }
@@ -399,7 +403,6 @@ void setup()
 void loop()
 {
   currentMillis = millis();
-
   if (currentMillis - previousMillis >= ntp_refresh_interval)
   {
     previousMillis = currentMillis;
@@ -409,6 +412,12 @@ void loop()
   char *dstAbbrev;
   time_t now = dstAdjusted.time(&dstAbbrev);
   struct tm *timeinfo = localtime(&now);
+
+  if(ntpsynchappened) {
+      Serial.println();
+        Serial.printf("NTP Sync time now: %d:%d:%d\n", timeinfo->tm_hour % 12, timeinfo->tm_min, timeinfo->tm_sec);
+        ntpsynchappened = false;
+  }
 
   int h = timeinfo->tm_hour % 12;
   int m = timeinfo->tm_min;
