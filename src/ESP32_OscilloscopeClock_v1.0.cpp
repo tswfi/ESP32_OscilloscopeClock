@@ -388,7 +388,7 @@ void setup()
 
   // fetch time on startup
   getNtpTime();
-/*
+  /*
   char *dstAbbrev;
   time_t now = dstAdjusted.time(&dstAbbrev);
   struct tm *timeinfo = localtime(&now);
@@ -413,10 +413,11 @@ void loop()
   time_t now = dstAdjusted.time(&dstAbbrev);
   struct tm *timeinfo = localtime(&now);
 
-  if(ntpsynchappened) {
-      Serial.println();
-        Serial.printf("NTP Sync time now: %d:%d:%d\n", timeinfo->tm_hour % 12, timeinfo->tm_min, timeinfo->tm_sec);
-        ntpsynchappened = false;
+  if (ntpsynchappened)
+  {
+    Serial.println();
+    Serial.printf("NTP Sync time now: %d:%d:%d\n", timeinfo->tm_hour % 12, timeinfo->tm_min, timeinfo->tm_sec);
+    ntpsynchappened = false;
   }
 
   int h = timeinfo->tm_hour % 12;
