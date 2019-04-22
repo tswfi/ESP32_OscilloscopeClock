@@ -306,7 +306,7 @@ void configModeCallback(WiFiManager *myWiFiManager)
   shouldSaveConfig = true;
 }
 
-void writeDefaultConfig(String json)
+void writeConfig(String json)
 {
   File configFile = SPIFFS.open("/config.json", "w");
   if (!configFile)
@@ -364,7 +364,7 @@ void setup()
   Serial.println("mounted SPIFFS");
   if (!SPIFFS.exists("/config.json"))
   {
-    writeDefaultConfig("{\"utcOffset\": 0}");
+    writeConfig("{\"utcOffset\": 0}");
   }
   // read the config from SPIFFS
   readConfig();
@@ -380,7 +380,16 @@ void setup()
   WiFiManagerParameter timezoneparameter("timezone", "Timezone: +2, -8, 0", buf, 3);
   wifiManager.addParameter(&timezoneparameter);
 
+  // connect to network or start ap to get the network information
   wifiManager.autoConnect();
+
+  if(shouldSaveConfig) {
+    char new_utc_offset[15];
+    strcpy(new_utc_offset, timezoneparameter.getValue());
+    String newconfig = "{\"utcOffset\": ";
+    newconfig.concat(new_utc_offset);
+    newconfig.concat("}");
+  }
 
   // start dac
   dac_output_enable(DAC_CHANNEL_1);
@@ -388,14 +397,6 @@ void setup()
 
   // fetch time on startup
   getNtpTime();
-  /*
-  char *dstAbbrev;
-  time_t now = dstAdjusted.time(&dstAbbrev);
-  struct tm *timeinfo = localtime(&now);
-
-  Serial.println();
-  Serial.printf("Current time: %d:%d:%d\n", timeinfo->tm_hour % 12, timeinfo->tm_min, timeinfo->tm_sec);
-*/
 
   previousMillis = currentMillis;
 }
