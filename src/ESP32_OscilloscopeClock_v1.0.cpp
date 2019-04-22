@@ -51,6 +51,8 @@ bool shouldSaveConfig = false;
 // August 1st, 2018
 #define NTP_MIN_VALID_EPOCH 1533081600
 
+#define TRIGGER_PIN 12
+
 //Variables
 int lastx, lasty;
 unsigned long currentMillis = 0;
@@ -349,6 +351,7 @@ void readConfig()
 
 void setup()
 {
+  pinMode(TRIGGER_PIN, INPUT_PULLUP);
   Serial.begin(115200);
   Serial.println("\nESP32 Oscilloscope Clock v1.0");
   Serial.println("Mauro Pintus 2018\nwww.mauroh.com");
@@ -364,10 +367,8 @@ void setup()
   Serial.println("mounted SPIFFS");
   if (!SPIFFS.exists("/config.json"))
   {
-    writeConfig("{\"utcOffset\": 0}");
+    writeConfig("{\"utc_offset\": 0}");
   }
-  // read the config from SPIFFS
-  readConfig();
 
   Serial.println("Starting WifiManager");
 
@@ -384,12 +385,19 @@ void setup()
   wifiManager.autoConnect();
 
   if(shouldSaveConfig) {
+    Serial.println("New settings available, trying to save them");
     char new_utc_offset[15];
     strcpy(new_utc_offset, timezoneparameter.getValue());
-    String newconfig = "{\"utcOffset\": ";
+    String newconfig = "{\"utc_offset\": ";
     newconfig.concat(new_utc_offset);
     newconfig.concat("}");
+    Serial.println("Trying to save new config: ");
+    Serial.println(newconfig);
+    writeConfig(newconfig);
   }
+
+  // read the config from SPIFFS
+  readConfig();
 
   // start dac
   dac_output_enable(DAC_CHANNEL_1);
@@ -430,4 +438,13 @@ void loop()
   PlotTable(HrPtrData, sizeof(HrPtrData), 0xFF, 0, (9 * (5 * h + m / 12))); // 9*h
   PlotTable(MinPtrData, sizeof(MinPtrData), 0xFF, 0, 9 * m);                // 9*m
   PlotTable(SecPtrData, sizeof(SecPtrData), 0xFF, 0, 5 * s);                // 5*s
+
+  // force the wifimanager to ask new config
+  if ( digitalRead(TRIGGER_PIN) == LOW ) {
+    Serial.println("Forgetting settings and restarting to get portal up");
+    wifiManager.resetSettings();
+    Serial.println("Restarting");
+    delay(1000);
+    ESP.restart();
+  }
 }
